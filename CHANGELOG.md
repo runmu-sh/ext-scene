@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+
+- No longer bundled with μClient: `builtin` and `defaultEnabled` are gone from the manifest. Install Scene from Extensions → Discover like any other extension. The panel is unchanged.
+
 ## 1.0.2
 
 - Its own repository, [runmu-sh/ext-scene](https://github.com/runmu-sh/ext-scene), made with `npm create @runmu.sh/extension` and built against `@runmu.sh/sdk` from npm. The package is `@runmu.sh/ext-scene`. The panel is unchanged.

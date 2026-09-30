@@ -2,9 +2,9 @@
 
 The Scene panel of [μClient](https://runmu.sh) (R-SCENE): the room you are in, its exits and who is there.
 
-First-party and **built-in**. Unlike the other built-ins it is **on by default** (`"defaultEnabled": true`), because the Scene is part of the default layout (Terminal left, Scene right top, Channels right bottom). You can turn it off per world in *Settings → Extensions*. Uninstalling it only hides it, and **Restore** brings it back.
+First-party, on the [marketplace](https://runmu.sh/marketplace/x/scene). Install it from **☰ → Extensions → Discover**; once installed it is on in every world and takes the Scene slot of the default layout (right top). Turn it off per world in **Extensions → Installed**.
 
-Until 2026-09-29 the panel was part of the client core (`features/world-panels/ScenePanel.vue`). The core still tracks the room for every session; this extension only draws it.
+Until 2026-09-29 the panel was part of the client core, and until 1.0.3 it was bundled with the client. The core still tracks the room for every session; this extension only draws it.
 
 ## Where the room comes from
 The host keeps one scene per session and fills it from:
@@ -42,17 +42,17 @@ npm run typecheck    # against @muclient/sdk (npm:@runmu.sh/sdk)
 npm run dev          # dev server on http://localhost:5199/ with hot reload
 ```
 
-In μClient: **☰ → Extensions → Advanced → Developer → load from dev server**. A dev build replaces the built-in Scene while it is loaded.
+In μClient: **☰ → Extensions → Advanced → Developer → load from dev server**.
 
 ## Publish
-Bump `version` and `CHANGELOG.md`, then:
+The repository is linked to the marketplace listing [scene](https://runmu.sh/marketplace/x/scene) (publisher `bitmuse`): every version tag is imported within seconds (webhook), or within 30 minutes (poll).
 
 ```sh
-npm run build && npm pack
-curl -H "Authorization: Bearer $MKT_TOKEN" --data-binary @runmu.sh-ext-scene-<version>.tgz https://market.runmu.sh/v1/publish
+# bump version in package.json and add a CHANGELOG entry, then:
+npm run build && git commit -am "Scene x.y.z" && git tag vx.y.z && git push --follow-tags
 ```
 
-The listing is [scene](https://runmu.sh/marketplace/x/scene) (publisher `bitmuse`). Versions are immutable.
+`dist/` is committed: the marketplace builds nothing. Versions are immutable.
 
 ## License
 MIT.

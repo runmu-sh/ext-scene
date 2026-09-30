@@ -1,6 +1,6 @@
 {
   "name": "@runmu.sh/ext-scene",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "The Scene panel: the room you are in (title, area, atmosphere, description, pose), its exits as buttons and who is present, from GMCP Room.*, Char.Items.*, MSDP or another extension.",
   "keywords": [
     "scene",
@@ -44,8 +44,6 @@
   "muclient": {
     "id": "scene",
     "api": "^1.4",
-    "builtin": true,
-    "defaultEnabled": true,
     "source": "src/index.ts",
     "displayName": "Scene",
     "description": "The Scene panel: the current room, its exits as buttons and who is present, from GMCP Room.*, Char.Items.*, MSDP or another extension.",

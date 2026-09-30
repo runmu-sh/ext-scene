@@ -6,7 +6,7 @@
  * Composed as Underspire's room panel: title (uppercase glow, bottom rule), area, atmosphere (italic dim),
  * description, pose line (italic with a left rule), then ┤EXITS├ and ┤PRESENT├ section heads over ▸
  * lists; "none" when a list is empty and NO ROOM YET (an uppercase tracked faint label, 09-29) before any room arrives. An exit is a button
- * that sends the direction. Built-in and on by default: it is part of the default layout (R-LAYOUT).
+ * that sends the direction. A marketplace extension; once installed it takes the Scene slot of the default layout (R-LAYOUT).
  */
 import { defineExtension, type Dispose, type Mu, type PanelMountCtx, type SceneView } from '@muclient/sdk';
 
