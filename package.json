@@ -1,0 +1,73 @@
+{
+  "name": "@runmu.sh/ext-scene",
+  "version": "1.0.2",
+  "description": "The Scene panel: the room you are in (title, area, atmosphere, description, pose), its exits as buttons and who is present, from GMCP Room.*, Char.Items.*, MSDP or another extension.",
+  "keywords": [
+    "scene",
+    "room",
+    "exits",
+    "gmcp",
+    "msdp",
+    "panel"
+  ],
+  "license": "MIT",
+  "homepage": "https://runmu.sh/marketplace/x/scene",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/runmu-sh/ext-scene.git"
+  },
+  "bugs": {
+    "url": "https://github.com/runmu-sh/ext-scene/issues"
+  },
+  "type": "module",
+  "exports": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/dev.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "node scripts/build.mjs --check"
+  },
+  "devDependencies": {
+    "@muclient/sdk": "npm:@runmu.sh/sdk@^1.6.0",
+    "@runmu.sh/dev": "^0.1.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "muclient": {
+    "id": "scene",
+    "api": "^1.4",
+    "builtin": true,
+    "defaultEnabled": true,
+    "source": "src/index.ts",
+    "displayName": "Scene",
+    "description": "The Scene panel: the current room, its exits as buttons and who is present, from GMCP Room.*, Char.Items.*, MSDP or another extension.",
+    "categories": [
+      "interface",
+      "mapping"
+    ],
+    "contributes": {
+      "panels": [
+        {
+          "id": "scene",
+          "title": "Scene"
+        }
+      ],
+      "gmcp": [
+        "Room 1"
+      ]
+    },
+    "capabilities": [
+      "read-output",
+      "send-commands"
+    ],
+    "publisher": "bitmuse"
+  }
+}
