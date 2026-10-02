@@ -1,5 +1,5 @@
 // src/index.ts
-import { defineExtension } from "@muclient/sdk";
+import { defineExtension, h } from "@muclient/sdk";
 var COPY = {
   title: "Scene",
   awaiting: "No room yet",
@@ -9,98 +9,128 @@ var COPY = {
   hostile: "hostile",
   go: (dir) => `go ${dir}`
 };
+var R = '.ext-panel[data-ext="scene"] .mu-scene';
 var SCENE_CSS = `
-.mu-scene { height: 100%; overflow-y: auto; background: var(--bg-elev); padding: .7rem .85rem 1rem; font-size: .9rem; color: var(--fg); box-sizing: border-box; }
-.mu-scene:focus { outline: none; }
-.mu-scene .title { margin: 0 0 .5rem; padding-bottom: .4rem; font-weight: 400; font-size: .9rem; letter-spacing: .16em; text-transform: uppercase; color: var(--accent-bright); border-bottom: 1px solid var(--border-bright); }
-.mu-scene .area { font-size: .66rem; letter-spacing: .2em; text-transform: uppercase; color: var(--fg-faint); margin: -.2rem 0 .4rem; }
-.mu-scene .atmo { color: var(--fg-dim); font-style: italic; margin: 0 0 .4rem; }
-.mu-scene .desc { margin: 0 0 .4rem; white-space: pre-wrap; }
-.mu-scene .pose { color: var(--fg-dim); font-style: italic; margin: 0 0 .5rem; padding-left: .5rem; border-left: 2px solid var(--border-bright); }
-.mu-scene .list { list-style: none; margin: 0; padding: 0; }
-.mu-scene .list li { padding: .08rem 0; color: var(--fg); }
-.mu-scene .sigil { color: var(--accent); margin-right: .6ch; }
-.mu-scene .exit { color: inherit; text-align: left; transition: color .12s ease; }
-.mu-scene .exit:hover { color: var(--accent-bright); }
-.mu-scene .exit:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 1px; }
-.mu-scene .hostile { color: var(--alert); font-size: .72rem; margin-left: 6px; }
-.mu-scene .none { margin: .1rem 0; font-style: normal; }
-.mu-scene .awaiting { margin: 0; color: var(--fg-faint); font-style: normal; font-size: .64rem; letter-spacing: .14em; text-transform: uppercase; }
+${R} { height: 100%; overflow-y: auto; background: var(--bg-elev); padding: .7rem .85rem 1rem; font-family: var(--font-mono); font-size: .9rem; color: var(--fg); box-sizing: border-box; }
+${R}:focus { outline: none; }
+${R} .title { margin: 0 0 .5rem; padding-bottom: .4rem; font-weight: 400; font-size: .9rem; letter-spacing: .16em; text-transform: uppercase; color: var(--accent-bright); border-bottom: 1px solid var(--border-bright); }
+${R} .area { font-size: .66rem; letter-spacing: .2em; text-transform: uppercase; color: var(--fg-faint); margin: -.2rem 0 .4rem; }
+${R} .atmo { color: var(--fg-dim); font-style: italic; margin: 0 0 .4rem; }
+${R} .desc { margin: 0 0 .4rem; white-space: pre-wrap; }
+${R} .pose { color: var(--fg-dim); font-style: italic; margin: 0 0 .5rem; padding-left: .5rem; border-left: 2px solid var(--border-bright); }
+${R} .list { list-style: none; margin: 0; padding: 0; }
+${R} .list li { padding: .08rem 0; color: var(--fg); }
+${R} .sigil { color: var(--accent); margin-right: .6ch; }
+${R} .exit { display: inline-flex; align-items: center; min-height: 24px; color: inherit; text-align: left; transition: color .12s ease; }
+${R} .exit:hover { color: var(--accent-bright); }
+${R} .exit:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: -2px; }
+${R} .hostile { color: var(--alert); font-size: .72rem; margin-left: 6px; }
+${R} .none { margin: .1rem 0; font-style: normal; color: var(--fg-faint); }
+${R} .awaiting { margin: 0; color: var(--fg-faint); font-style: normal; font-size: .64rem; letter-spacing: .14em; text-transform: uppercase; }
 `;
-function el(tag, props = {}, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v === void 0 || v === false) continue;
-    if (k === "class") e.className = String(v);
-    else e.setAttribute(k, v === true ? "" : String(v));
-  }
-  for (const k of kids) if (k !== null && k !== false) e.append(k);
-  return e;
-}
+var HOST_CSS = { secHead: "sec-head", secClose: "sec-close", empty: "empty", glow: "glow-text" };
 function presentOf(s) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const n of s.present) if (!seen.has(n)) {
+  for (const n of s.present ?? []) if (!seen.has(n)) {
     seen.add(n);
     out.push({ name: n });
   }
-  for (const it of s.items) if (!seen.has(it.name)) {
+  for (const it of s.items ?? []) if (!seen.has(it.name)) {
     seen.add(it.name);
     out.push(it.hostile ? { name: it.name, hostile: true } : { name: it.name });
   }
   return out;
 }
-var sectionHead = (label) => el("div", { class: "sec-head", role: "heading", "aria-level": "3" }, label, el("span", { class: "sec-close", "aria-hidden": "true" }));
-var sigil = () => el("span", { class: "sigil", "aria-hidden": "true" }, "\u25B8");
-function renderScene(s, go) {
-  if (!s || !s.known) return [el("p", { class: "empty awaiting", "data-testid": "scene-empty" }, COPY.awaiting)];
-  const out = [el("h3", { class: "title glow-text", role: "heading", "aria-level": "2", "data-testid": "scene-title" }, s.title)];
-  if (s.area) out.push(el("div", { class: "area", "data-testid": "scene-area" }, s.area));
-  if (s.atmosphere) out.push(el("p", { class: "atmo" }, s.atmosphere));
-  if (s.desc) out.push(el("p", { class: "desc" }, s.desc));
-  if (s.pose) out.push(el("p", { class: "pose" }, s.pose));
-  out.push(sectionHead(COPY.exits));
-  if (s.exits.length) {
-    const ul = el("ul", { class: "list", "data-testid": "scene-exits" });
-    for (const dir of s.exits) {
-      const b = el("button", { class: "exit", type: "button", title: COPY.go(dir) }, sigil(), dir);
-      b.addEventListener("click", () => go(dir));
-      ul.append(el("li", {}, b));
-    }
-    out.push(ul);
-  } else out.push(el("p", { class: "empty none" }, COPY.none));
-  out.push(sectionHead(COPY.present));
+var sigil = () => h("span", { class: "sigil", "aria-hidden": "true" }, "\u25B8");
+function renderScene(s, go, opts = {}) {
+  const c = { ...HOST_CSS, ...opts.css };
+  const mark = (el, what) => {
+    opts.target?.(el, what);
+    return el;
+  };
+  if (!s || !s.known) return [h("p", { class: `${c.empty} awaiting`, "data-testid": "scene-empty" }, COPY.awaiting)];
+  const head = (label) => h("div", { class: c.secHead, role: "heading", "aria-level": "3" }, label, h("span", { class: c.secClose, "aria-hidden": "true" }));
+  const out = [h("h3", { class: `title ${c.glow}`, role: "heading", "aria-level": "2", "data-testid": "scene-title" }, s.title)];
+  if (s.area) out.push(h("div", { class: "area", "data-testid": "scene-area" }, s.area));
+  if (s.atmosphere) out.push(h("p", { class: "atmo" }, s.atmosphere));
+  if (s.desc) out.push(h("p", { class: "desc" }, s.desc));
+  if (s.pose) out.push(h("p", { class: "pose" }, s.pose));
+  out.push(head(COPY.present));
+  const items = new Map((s.items ?? []).map((it) => [it.name, it]));
+  const people = new Set(s.present ?? []);
   const present = presentOf(s);
   if (present.length) {
-    const ul = el("ul", { class: "list", "data-testid": "scene-present" });
-    for (const p of present) ul.append(el("li", {}, sigil(), p.name, p.hostile ? el("span", { class: "hostile" }, COPY.hostile) : null));
+    const ul = h("ul", { class: "list", "data-testid": "scene-present" });
+    for (const p of present) {
+      const it = people.has(p.name) ? void 0 : items.get(p.name);
+      const li = h("li", { class: "entity-ref", "data-item-id": it?.id || void 0 }, sigil(), p.name, p.hostile ? h("span", { class: "hostile" }, COPY.hostile) : null);
+      ul.append(it ? mark(li, { item: it }) : mark(li, { person: p.name }));
+    }
     out.push(ul);
-  } else out.push(el("p", { class: "empty none" }, COPY.none));
+  } else out.push(h("p", { class: `${c.empty} none` }, COPY.none));
+  if (s.exits.length) {
+    out.push(head(COPY.exits));
+    const ul = h("ul", { class: "list", "data-testid": "scene-exits" });
+    for (const dir of s.exits) {
+      const b = h("button", { class: "exit", type: "button", title: COPY.go(dir), onclick: () => go(dir) }, sigil(), dir);
+      ul.append(h("li", {}, mark(b, { exit: dir })));
+    }
+    out.push(ul);
+  }
   return out;
 }
 var index_default = defineExtension({
   activate(ctx) {
     const mu = ctx.mu;
     mu.ui.style(SCENE_CSS);
+    const css = { secHead: mu.ui.css.secHead, secClose: mu.ui.css.secClose, empty: mu.ui.css.empty, glow: mu.ui.css.glow };
     const mount = (host, pc) => {
-      const root = el("section", { class: "mu-scene", "aria-label": COPY.title, "data-focus-region": "scene", tabindex: "-1", "data-testid": "scene" });
+      const root = h("section", { class: "mu-scene", "aria-label": COPY.title, "data-focus-region": "scene", tabindex: "-1", "data-testid": "scene" });
       host.append(root);
       const sid = pc.sid;
-      const go = (dir) => {
-        if (sid) void mu.sessions.send(dir, sid);
-      };
       if (!sid) {
-        root.replaceChildren(...renderScene(null, go));
+        root.replaceChildren(...renderScene(null, () => {
+        }, { css }));
         return () => root.remove();
       }
-      const off = mu.scene.watch((s) => root.replaceChildren(...renderScene(s, go)), sid);
+      const go = (dir) => {
+        void mu.sessions.send(dir, { sid });
+      };
+      let targets = [];
+      const untarget = () => {
+        for (const d of targets) d();
+        targets = [];
+      };
+      const target = (el, what) => {
+        if ("exit" in what) targets.push(mu.menus.target(el, { kind: "scene-exit", sid, exit: what.exit }));
+        else if ("item" in what) targets.push(mu.menus.target(el, { kind: "scene-item", sid, item: what.item }));
+      };
+      let room = null;
+      const off = mu.scene.watch((s) => {
+        const moved = !s.known || !s.id || s.id !== room;
+        room = s.known && s.id ? s.id : null;
+        const top = root.scrollTop;
+        untarget();
+        root.replaceChildren(...renderScene(s, go, { css, target }));
+        root.scrollTop = moved ? 0 : top;
+      }, sid);
       return () => {
         off();
+        untarget();
         root.remove();
       };
     };
-    mu.panels.register({ id: "scene", title: COPY.title, singleton: true, defaultPosition: "right-top", order: 10, mount });
-    mu.gmcp.on("Room", (_d, { sid }) => mu.panels.autoAdd("scene", sid));
+    mu.panels.register({ id: "scene", title: COPY.title, singleton: true, defaultPosition: "right-top", order: 10, show: "auto", mount });
+    ctx.subscriptions.push(mu.sessions.each((s) => {
+      let done = false;
+      return mu.scene.watch((v) => {
+        if (!done && v.known) {
+          done = true;
+          mu.panels.touch("scene", s.id);
+        }
+      }, s.id);
+    }));
   }
 });
 export {

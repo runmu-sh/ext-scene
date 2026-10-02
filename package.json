@@ -1,7 +1,7 @@
 {
   "name": "@runmu.sh/ext-scene",
-  "version": "1.0.3",
-  "description": "The Scene panel: the room you are in (title, area, atmosphere, description, pose), its exits as buttons and who is present, from GMCP Room.*, Char.Items.*, MSDP or another extension.",
+  "version": "1.1.0",
+  "description": "The Scene panel: the room you are in (title, area, atmosphere, description, pose), who is present and its exits as buttons, from GMCP Room.*, Char.Items.*, MSDP or another extension.",
   "keywords": [
     "scene",
     "room",
@@ -23,6 +23,7 @@
   "exports": "./dist/index.js",
   "files": [
     "dist",
+    "src/types.ts",
     "README.md",
     "CHANGELOG.md"
   ],
@@ -30,23 +31,25 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "node scripts/build.mjs --check"
+    "check": "node scripts/build.mjs --check",
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
-    "@muclient/sdk": "npm:@runmu.sh/sdk@^1.6.0",
-    "@runmu.sh/dev": "^0.1.0",
+    "@muclient/sdk": "npm:@runmu.sh/sdk@^1.12.0",
+    "@runmu.sh/dev": "^0.2.0",
     "esbuild": "^0.28.2",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "happy-dom": "^20.0.0"
   },
   "engines": {
     "node": ">=20"
   },
   "muclient": {
     "id": "scene",
-    "api": "^1.4",
+    "api": "^1.12",
     "source": "src/index.ts",
     "displayName": "Scene",
-    "description": "The Scene panel: the current room, its exits as buttons and who is present, from GMCP Room.*, Char.Items.*, MSDP or another extension.",
+    "description": "The Scene panel: the current room, who is present and its exits as buttons, from GMCP Room.*, Char.Items.*, MSDP or another extension.",
     "categories": [
       "interface",
       "mapping"
@@ -55,17 +58,17 @@
       "panels": [
         {
           "id": "scene",
-          "title": "Scene"
+          "title": "Scene",
+          "order": 10,
+          "defaultPosition": "right-top",
+          "singleton": true
         }
-      ],
-      "gmcp": [
-        "Room 1"
       ]
     },
     "capabilities": [
-      "read-output",
       "send-commands"
     ],
     "publisher": "bitmuse"
-  }
+  },
+  "types": "./src/types.ts"
 }
