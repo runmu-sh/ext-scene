@@ -1,6 +1,7 @@
 /**
  * `npm test`: the extension in the headless μClient host (@runmu.sh/dev/test), with a happy-dom document for the
  * panel. The headless `mu.scene.watch` fires once at subscribe only, so `setup()` wraps it with a live one.
+ * `setup({ legacy: true })` removes `mu.menus.kind` and `mu.panels.focus`, as a 1.12 or 1.13 host has neither.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,6 +18,7 @@ function find() {
   throw new Error('@runmu.sh/dev/test was not found. Run npm install (it is in the @runmu.sh/dev devDependency).');
 }
 const { createHost } = await import(pathToFileURL(find()).href);
+const { validate } = await import('./schema.mjs');
 
 const win = new Window();
 globalThis.window = win;
@@ -28,8 +30,9 @@ const BLANK = { known: false, id: '', title: '', area: '', desc: '', atmosphere:
 const CHAPEL = { id: '9', title: 'Chapel of Ash', area: 'The Undercroft', desc: 'Soot on every pew.', atmosphere: 'Cold air.', pose: 'Ivo kneels.', exits: ['north', 'down', 'west'], present: ['Brother Ivo'], items: [{ id: '7', name: 'a rust-hound', hostile: true }, { id: '8', name: 'a candle' }] };
 
 /** A host whose scene watch re-fires on `scene(sid, patch)`, and whose menu targets are counted. */
-async function setup(opts = {}) {
-  const host = createHost({ root: ROOT, sessions: [{ id: 's1', worldId: 'w1' }], ...opts });
+async function setup({ legacy = false, ...hostOpts } = {}) {
+  const opts = { legacy };
+  const host = createHost({ root: ROOT, sessions: [{ id: 's1', worldId: 'w1' }], ...hostOpts });
   const scenes = new Map();
   const watchers = new Set();
   const view = (sid) => ({ ...BLANK, ...(scenes.get(sid) ?? {}) });
@@ -40,7 +43,15 @@ async function setup(opts = {}) {
     for (const w of [...watchers]) if (w.sid === sid) w.fn(view(sid));
   };
   const targets = [];
-  host.mu.menus.target = (el, t) => { const r = { el, t, live: true }; targets.push(r); return () => { r.live = false; }; };
+  // SDK 1.14 kinds as the host checks them: only a registered kind is published, and its data matches the schema.
+  const kinds = new Map();
+  if (opts.legacy) host.mu.menus.kind = undefined;
+  else host.mu.menus.kind = (spec) => { kinds.set(spec.id, spec); return () => kinds.delete(spec.id); };
+  host.mu.menus.target = (el, t) => {
+    if (!opts.legacy && !kinds.has(t.kind)) throw new Error(`menus.target(${t.kind}): not a registered kind`);
+    const r = { el, t, live: true }; targets.push(r); return () => { r.live = false; };
+  };
+  if (opts.legacy) host.mu.panels.focus = undefined;
   // The headless host maps every css name to itself; μClient's are these (clients/web sdk.ts UI_CSS).
   host.mu.ui.css = { ...host.mu.ui.css, secHead: 'sec-head', secClose: 'sec-close', empty: 'empty', glow: 'glow-text' };
   const touches = [];
@@ -53,7 +64,7 @@ async function setup(opts = {}) {
     const q = (s) => el.querySelector(s);
     return { el, off, q, root: () => q('[data-testid=scene]') };
   };
-  return { host, ext, scene, targets, touches, watchers, mount };
+  return { host, ext, scene, targets, touches, watchers, mount, kinds };
 }
 
 const heads = (el) => [...el.querySelectorAll('.sec-head')].map((x) => x.textContent);
@@ -65,9 +76,12 @@ test('registration: Scene, right top, order 10, singleton, show auto; the manife
   const { id, title, defaultPosition, order, singleton, show } = host.panels.get('scene');
   assert.deepEqual({ id, title, defaultPosition, order, singleton, show }, { id: 'scene', title: 'Scene', defaultPosition: 'right-top', order: 10, singleton: true, show: 'auto' });
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  assert.deepEqual(pkg.muclient.contributes, { panels: [{ id: 'scene', title: 'Scene', order: 10, defaultPosition: 'right-top', singleton: true }] });
+  assert.deepEqual(pkg.muclient.contributes, {
+    panels: [{ id: 'scene', title: 'Scene', order: 10, defaultPosition: 'right-top', singleton: true }],
+    commands: [{ id: 'focus.scene', title: 'Go to scene', keys: ['Alt+R'] }],
+  });
   assert.deepEqual(pkg.muclient.capabilities, ['send-commands']);
-  assert.equal(pkg.muclient.api, '^1.12');
+  assert.equal(pkg.muclient.api, '^1.12', 'menus.kind and panels.focus are guarded, so 1.12 hosts still load it');
   assert.equal(host.errors.length, 0);
   await host.unload();
   assert.deepEqual(host.live(), [], 'everything registered through mu is disposed');
@@ -163,24 +177,68 @@ test('an exit click sends the direction to that session, with no key (twice is t
   await host.unload();
 });
 
-test('context targets: each exit is scene-exit, each room item scene-item; redrawn and unmounted ones are released', async () => {
+test('context targets: each exit is scene.exit, each room item scene.item; redrawn and unmounted ones are released', async () => {
   const { host, scene, targets, mount } = await setup();
   const p = mount();
   scene('s1', CHAPEL);
   const live = () => targets.filter((t) => t.live).map((t) => t.t);
   assert.deepEqual(live(), [
+    { kind: 'scene.item', sid: 's1', data: { item: { id: '7', name: 'a rust-hound', hostile: true } } },
+    { kind: 'scene.item', sid: 's1', data: { item: { id: '8', name: 'a candle' } } },
+    { kind: 'scene.exit', sid: 's1', data: { exit: 'north' } },
+    { kind: 'scene.exit', sid: 's1', data: { exit: 'down' } },
+    { kind: 'scene.exit', sid: 's1', data: { exit: 'west' } },
+  ]);
+  assert.equal(targets.find((t) => t.t.data.exit === 'west').el.tagName, 'BUTTON');
+  scene('s1', { exits: ['up'], items: [] });
+  assert.deepEqual(live(), [{ kind: 'scene.exit', sid: 's1', data: { exit: 'up' } }], 'the old targets go with the old rows');
+  p.off();
+  assert.deepEqual(live(), []);
+  await host.unload();
+});
+
+test('context kinds: scene.item and scene.exit registered with titles and schemas the published data passes; disposed on unload', async () => {
+  const { host, scene, targets, mount, kinds } = await setup();
+  assert.deepEqual([...kinds.values()].map(({ id, title }) => ({ id, title })), [{ id: 'scene.item', title: 'Scene item' }, { id: 'scene.exit', title: 'Exit' }]);
+  assert.deepEqual(kinds.get('scene.item').schema.required, ['item']);
+  assert.deepEqual(kinds.get('scene.exit').schema.required, ['exit']);
+  const p = mount();
+  scene('s1', CHAPEL);
+  for (const { t } of targets) assert.equal(validate(kinds.get(t.kind).schema, t.data), null, JSON.stringify(t));
+  assert.match(validate(kinds.get('scene.exit').schema, { exit: 3 }), /expected string/);
+  assert.match(validate(kinds.get('scene.item').schema, { name: 'x' }), /item/);
+  p.off();
+  await host.unload();
+  assert.equal(kinds.size, 0, 'both kinds are disposed');
+});
+
+test('an older host (no menus.kind, no panels.focus): the 1.12 kinds scene-exit / scene-item, and no focus.scene command', async () => {
+  const { host, scene, targets, mount } = await setup({ legacy: true });
+  assert.equal(host.commands.has('focus.scene'), false, 'the 1.12/1.13 host binds Alt+R itself');
+  const p = mount();
+  scene('s1', CHAPEL);
+  assert.deepEqual(targets.filter((t) => t.live).map((t) => t.t), [
     { kind: 'scene-item', sid: 's1', item: { id: '7', name: 'a rust-hound', hostile: true } },
     { kind: 'scene-item', sid: 's1', item: { id: '8', name: 'a candle' } },
     { kind: 'scene-exit', sid: 's1', exit: 'north' },
     { kind: 'scene-exit', sid: 's1', exit: 'down' },
     { kind: 'scene-exit', sid: 's1', exit: 'west' },
   ]);
-  assert.equal(targets.find((t) => t.t.exit === 'west').el.tagName, 'BUTTON');
-  scene('s1', { exits: ['up'], items: [] });
-  assert.deepEqual(live(), [{ kind: 'scene-exit', sid: 's1', exit: 'up' }], 'the old targets go with the old rows');
+  assert.equal(host.errors.length, 0);
   p.off();
-  assert.deepEqual(live(), []);
   await host.unload();
+  assert.deepEqual(host.live(), []);
+});
+
+test('Alt+R: focus.scene (Go to scene, group Focus, while a session is open) calls mu.panels.focus("scene")', async () => {
+  const { host } = await setup();
+  const c = host.commands.get('focus.scene');
+  assert.deepEqual({ title: c.title, keys: c.keys, group: c.group, when: c.when }, { title: 'Go to scene', keys: ['Alt+R'], group: 'Focus', when: 'session' });
+  host.mu.commands.run('focus.scene');
+  assert.deepEqual(host.calls.filter((x) => x.path === 'panels.focus'), [{ path: 'panels.focus', args: ['scene'] }]);
+  assert.equal(host.errors.length, 0);
+  await host.unload();
+  assert.equal(host.commands.has('focus.scene'), false, 'unregistered on unload');
 });
 
 test('scroll: an update in the same room keeps it; a move resets it; no room id resets on every update', async () => {

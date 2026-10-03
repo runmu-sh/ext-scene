@@ -1,5 +1,11 @@
 // src/index.ts
 import { defineExtension, h } from "@muclient/sdk";
+
+// src/types.ts
+var ITEM_KIND = "scene.item";
+var EXIT_KIND = "scene.exit";
+
+// src/index.ts
 var COPY = {
   title: "Scene",
   awaiting: "No room yet",
@@ -7,7 +13,18 @@ var COPY = {
   exits: "Exits",
   none: "none",
   hostile: "hostile",
-  go: (dir) => `go ${dir}`
+  go: (dir) => `go ${dir}`,
+  focus: "Go to scene",
+  itemKind: "Scene item",
+  exitKind: "Exit"
+};
+var KIND_SCHEMAS = {
+  [ITEM_KIND]: {
+    type: "object",
+    required: ["item"],
+    properties: { item: { type: "object", required: ["id", "name"], properties: { id: { type: "string" }, name: { type: "string" }, hostile: { type: "boolean" } } } }
+  },
+  [EXIT_KIND]: { type: "object", required: ["exit"], properties: { exit: { type: "string" } } }
 };
 var R = '.ext-panel[data-ext="scene"] .mu-scene';
 var SCENE_CSS = `
@@ -85,6 +102,15 @@ var index_default = defineExtension({
     const mu = ctx.mu;
     mu.ui.style(SCENE_CSS);
     const css = { secHead: mu.ui.css.secHead, secClose: mu.ui.css.secClose, empty: mu.ui.css.empty, glow: mu.ui.css.glow };
+    const kinds = typeof mu.menus.kind === "function";
+    if (kinds) {
+      ctx.subscriptions.push(
+        mu.menus.kind({ id: ITEM_KIND, title: COPY.itemKind, schema: KIND_SCHEMAS[ITEM_KIND] }),
+        mu.menus.kind({ id: EXIT_KIND, title: COPY.exitKind, schema: KIND_SCHEMAS[EXIT_KIND] })
+      );
+    }
+    const exitTarget = (sid, exit) => kinds ? { kind: EXIT_KIND, sid, data: { exit } } : { kind: "scene-exit", sid, exit };
+    const itemTarget = (sid, item) => kinds ? { kind: ITEM_KIND, sid, data: { item } } : { kind: "scene-item", sid, item };
     const mount = (host, pc) => {
       const root = h("section", { class: "mu-scene", "aria-label": COPY.title, "data-focus-region": "scene", tabindex: "-1", "data-testid": "scene" });
       host.append(root);
@@ -103,8 +129,8 @@ var index_default = defineExtension({
         targets = [];
       };
       const target = (el, what) => {
-        if ("exit" in what) targets.push(mu.menus.target(el, { kind: "scene-exit", sid, exit: what.exit }));
-        else if ("item" in what) targets.push(mu.menus.target(el, { kind: "scene-item", sid, item: what.item }));
+        if ("exit" in what) targets.push(mu.menus.target(el, exitTarget(sid, what.exit)));
+        else if ("item" in what) targets.push(mu.menus.target(el, itemTarget(sid, what.item)));
       };
       let room = null;
       const off = mu.scene.watch((s) => {
@@ -122,6 +148,11 @@ var index_default = defineExtension({
       };
     };
     mu.panels.register({ id: "scene", title: COPY.title, singleton: true, defaultPosition: "right-top", order: 10, show: "auto", mount });
+    if (typeof mu.panels.focus === "function") {
+      mu.commands.register({ id: "focus.scene", title: COPY.focus, keys: ["Alt+R"], group: "Focus", when: "session", run: () => {
+        mu.panels.focus?.("scene");
+      } });
+    }
     ctx.subscriptions.push(mu.sessions.each((s) => {
       let done = false;
       return mu.scene.watch((v) => {
@@ -135,6 +166,9 @@ var index_default = defineExtension({
 });
 export {
   COPY,
+  EXIT_KIND,
+  ITEM_KIND,
+  KIND_SCHEMAS,
   SCENE_CSS,
   index_default as default,
   presentOf,

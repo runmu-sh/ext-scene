@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Alt+R (*Go to scene*) is now the extension's own command, `focus.scene`, in Settings → Keys under Scene: Focus. On μClient with extension API 1.14 it focuses the Scene panel when it is open; a rebinding you made keeps working. On an older μClient the client's own Alt+R stays in place.
+- The context menus on exits and room items use the kinds `scene.exit` (`data: { exit }`) and `scene.item` (`data: { item }`), which the extension registers with a schema. On a μClient before API 1.14 it keeps publishing `scene-exit` and `scene-item`.
+- `src/types.ts` types the two kinds for other extensions (`ContextKinds`, `SceneItemData`, `SceneExitData`), and the module exports `ITEM_KIND`, `EXIT_KIND` and `KIND_SCHEMAS`.
+- Built against SDK 1.14. Still needs extension API 1.12 or later.
+
 ## 1.1.0
 
 - Present now comes before Exits, and a room with no exits shows no Exits heading at all, as on Underspire.

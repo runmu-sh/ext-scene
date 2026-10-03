@@ -1,6 +1,6 @@
 {
   "name": "@runmu.sh/ext-scene",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "The Scene panel: the room you are in (title, area, atmosphere, description, pose), who is present and its exits as buttons, from GMCP Room.*, Char.Items.*, MSDP or another extension.",
   "keywords": [
     "scene",
@@ -35,11 +35,11 @@
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
-    "@muclient/sdk": "npm:@runmu.sh/sdk@^1.12.0",
-    "@runmu.sh/dev": "^0.2.0",
+    "@muclient/sdk": "npm:@runmu.sh/sdk@^1.14.0",
+    "@runmu.sh/dev": "^0.3.0",
     "esbuild": "^0.28.2",
-    "typescript": "^5.9.0",
-    "happy-dom": "^20.0.0"
+    "happy-dom": "^20.0.0",
+    "typescript": "^5.9.0"
   },
   "engines": {
     "node": ">=20"
@@ -62,6 +62,15 @@
           "order": 10,
           "defaultPosition": "right-top",
           "singleton": true
+        }
+      ],
+      "commands": [
+        {
+          "id": "focus.scene",
+          "title": "Go to scene",
+          "keys": [
+            "Alt+R"
+          ]
         }
       ]
     },

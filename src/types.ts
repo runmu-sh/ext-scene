@@ -42,4 +42,30 @@ export interface SceneCopy {
   none: string;
   hostile: string;
   go(dir: string): string;
+  /** The `focus.scene` command's title. @since 1.2.0 */
+  focus: string;
+  /** The context kinds' titles (the menu's accessible label). @since 1.2.0 */
+  itemKind: string;
+  exitKind: string;
+}
+
+/** The context kind of a room item in ┤PRESENT├ (SDK 1.14). @since 1.2.0 */
+export const ITEM_KIND = 'scene.item';
+/** The context kind of an exit button (SDK 1.14). @since 1.2.0 */
+export const EXIT_KIND = 'scene.exit';
+
+/** `data` of a `scene.item` target. @since 1.2.0 */
+export interface SceneItemData { item: SceneView['items'][number] }
+/** `data` of a `scene.exit` target. @since 1.2.0 */
+export interface SceneExitData { exit: string }
+
+/**
+ * Types `t.data` in another extension's `mu.menus.context({ target: 'scene.item' | 'scene.exit', … })` once it
+ * imports this file. @since 1.2.0
+ */
+declare module '@muclient/sdk' {
+  interface ContextKinds {
+    'scene.item': SceneItemData;
+    'scene.exit': SceneExitData;
+  }
 }

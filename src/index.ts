@@ -6,15 +6,22 @@
  * Composed as Underspire's room panel: title (uppercase glow, bottom rule), area, atmosphere (italic dim),
  * description, pose line (italic with a left rule), then ┤PRESENT├ over a ▸ list ("none" when empty) and, when the
  * room has exits, ┤EXITS├ over a ▸ list. Before any room it reads NO ROOM YET. An exit is a button that sends the
- * direction; exits and present items are context-menu targets (`scene-exit`, `scene-item`) for other extensions.
+ * direction; exits and room items are context-menu targets for other extensions, of the kinds `scene.exit` and
+ * `scene.item` this extension registers (SDK 1.14). On an older host they are the 1.12 kinds `scene-exit` and
+ * `scene-item`.
+ *
+ * Alt+R (`focus.scene`, Go to scene) focuses the panel through `mu.panels.focus` (SDK 1.14). Before 1.14 the host
+ * binds Alt+R itself, so the command is registered only when `mu.panels.focus` exists.
  *
  * Shown 'auto': the panel joins Views and adds itself (right top) the first time a session knows its room; the
  * player can set it off / auto / on per world (the host's "Show panel" row).
  */
-import { defineExtension, h, type Dispose, type Mu, type PanelMountCtx, type SceneView } from '@muclient/sdk';
+import { defineExtension, h, type ContextTarget, type Dispose, type JsonSchema, type Mu, type PanelMountCtx, type SceneView } from '@muclient/sdk';
 import type { PresentEntry, RenderOptions, SceneCopy, SceneCss } from './types';
+import { EXIT_KIND, ITEM_KIND } from './types';
 
-export type { PresentEntry, RenderOptions, SceneCopy, SceneCss } from './types';
+export type { PresentEntry, RenderOptions, SceneCopy, SceneCss, SceneExitData, SceneItemData } from './types';
+export { EXIT_KIND, ITEM_KIND } from './types';
 
 export const COPY: SceneCopy = {
   title: 'Scene',
@@ -24,6 +31,18 @@ export const COPY: SceneCopy = {
   none: 'none',
   hostile: 'hostile',
   go: (dir: string) => `go ${dir}`,
+  focus: 'Go to scene',
+  itemKind: 'Scene item',
+  exitKind: 'Exit',
+};
+
+/** The `data` schemas of the two context kinds, checked by the host on every `mu.menus.target` call. */
+export const KIND_SCHEMAS: Record<typeof ITEM_KIND | typeof EXIT_KIND, JsonSchema> = {
+  [ITEM_KIND]: {
+    type: 'object', required: ['item'],
+    properties: { item: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string' }, name: { type: 'string' }, hostile: { type: 'boolean' } } } },
+  },
+  [EXIT_KIND]: { type: 'object', required: ['exit'], properties: { exit: { type: 'string' } } },
 };
 
 const R = '.ext-panel[data-ext="scene"] .mu-scene';
@@ -109,6 +128,17 @@ export default defineExtension({
     mu.ui.style(SCENE_CSS);
     const css: SceneCss = { secHead: mu.ui.css.secHead, secClose: mu.ui.css.secClose, empty: mu.ui.css.empty, glow: mu.ui.css.glow };
 
+    // SDK 1.14 registered kinds; a 1.12 or 1.13 host has no `menus.kind` and gets the old flat kinds.
+    const kinds = typeof mu.menus.kind === 'function';
+    if (kinds) {
+      ctx.subscriptions.push(
+        mu.menus.kind({ id: ITEM_KIND, title: COPY.itemKind, schema: KIND_SCHEMAS[ITEM_KIND] }),
+        mu.menus.kind({ id: EXIT_KIND, title: COPY.exitKind, schema: KIND_SCHEMAS[EXIT_KIND] }),
+      );
+    }
+    const exitTarget = (sid: string, exit: string): ContextTarget => (kinds ? { kind: EXIT_KIND, sid, data: { exit } } : { kind: 'scene-exit', sid, exit });
+    const itemTarget = (sid: string, item: SceneView['items'][number]): ContextTarget => (kinds ? { kind: ITEM_KIND, sid, data: { item } } : { kind: 'scene-item', sid, item });
+
     const mount = (host: HTMLElement, pc: PanelMountCtx): Dispose => {
       const root = h('section', { class: 'mu-scene', 'aria-label': COPY.title, 'data-focus-region': 'scene', tabindex: '-1', 'data-testid': 'scene' });
       host.append(root);
@@ -119,8 +149,8 @@ export default defineExtension({
       let targets: Array<() => void> = [];
       const untarget = () => { for (const d of targets) d(); targets = []; };
       const target: RenderOptions['target'] = (el, what) => {
-        if ('exit' in what) targets.push(mu.menus.target(el, { kind: 'scene-exit', sid, exit: what.exit }));
-        else if ('item' in what) targets.push(mu.menus.target(el, { kind: 'scene-item', sid, item: what.item }));
+        if ('exit' in what) targets.push(mu.menus.target(el, exitTarget(sid, what.exit)));
+        else if ('item' in what) targets.push(mu.menus.target(el, itemTarget(sid, what.item)));
       };
       let room: string | null = null;
       const off = mu.scene.watch((s) => {
@@ -136,6 +166,10 @@ export default defineExtension({
     };
 
     mu.panels.register({ id: 'scene', title: COPY.title, singleton: true, defaultPosition: 'right-top', order: 10, show: 'auto', mount });
+    // Alt+R. A 1.12 or 1.13 host registers `focus.scene` itself (registering it again throws there), and has no `panels.focus`.
+    if (typeof mu.panels.focus === 'function') {
+      mu.commands.register({ id: 'focus.scene', title: COPY.focus, keys: ['Alt+R'], group: 'Focus', when: 'session', run: () => { mu.panels.focus?.('scene'); } });
+    }
     // Listed and auto-added once per session, the first time its scene knows a room: GMCP, MSDP or a provider alike.
     ctx.subscriptions.push(mu.sessions.each((s) => {
       let done = false;

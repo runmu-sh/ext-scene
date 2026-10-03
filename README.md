@@ -22,13 +22,13 @@ Package names are case-insensitive. Entering a new room clears Present. The room
 ## What it looks like
 On `--bg-elev`: the title in uppercase `--accent-bright` with a glow and a `--border-bright` rule under it, the area in small faint capitals, the atmosphere in italic `--fg-dim`, the description, and the pose line in italic with a 2px left rule. Then `┤PRESENT├` over a `▸` list of the people and room items present (a hostile item carries a small `hostile` tag in `--alert`; nobody reads `none`), and, when the room has exits, `┤EXITS├` over a `▸` list. Each exit is a button: clicking it sends the direction as if typed. Before any room arrives the panel says NO ROOM YET (an upright, uppercase, tracked faint label).
 
-The panel is the region `scene`, so **Alt+R** (*Go to scene*) focuses it.
+The panel is the region `scene`. **Alt+R** (*Go to scene*, command `focus.scene`) focuses it; rebind it in Settings → Keys. From 1.2.0 the extension registers the command itself (μClient with extension API 1.14); on an older μClient the client's own Alt+R does the same.
 
 ## Behaviour
 - Panel `scene`, singleton, default position right top, Views order 10 (after Terminal, before Channels).
 - **Show panel: auto** (per world, on the extension's settings page: off / auto / on). On auto the Scene joins Views and adds itself the first time a session knows its room, whatever the room came from (GMCP, MSDP, another extension); once per world on this device, so a Scene you closed stays closed.
 - A redraw in the same room (someone arrives, an item drops) keeps your scroll position; moving to another room scrolls back to the top. When the game sends no room id, every update counts as a move.
-- Right-click (or long-press) an exit or a room item for the menus other extensions add to them (`scene-exit` and `scene-item` targets).
+- Right-click (or long-press) an exit or a room item for the menus other extensions add to them. The extension registers the context kinds `scene.exit` (title *Exit*, `data: { exit }`) and `scene.item` (title *Scene item*, `data: { item: { id, name, hostile? } }`), each with a schema the host checks. On a μClient before API 1.14 it publishes the 1.12 kinds `scene-exit` and `scene-item` instead; on 1.14 an entry written for the old kinds still receives the new targets in the old shape.
 - It sends nothing to the game except the exits you click, and reads no GMCP itself: the room adapters fill the scene.
 
 ## Contract
@@ -42,9 +42,12 @@ No `ctx.exports` API. The module exports, for tests and other renderers:
 | `renderScene(scene, go, opts?)` | The panel's children for one `SceneView` (`null` or `known: false` → NO ROOM YET). `go(dir)` is called on an exit click. `opts.css` passes the host classes (`mu.ui.css`), `opts.target(el, what)` is called for each exit button and present row (to mark context targets). The 1.0 two-argument form still works. |
 | `presentOf(scene)` | People first, then room items, each name once: `{ name, hostile? }[]`. |
 | `COPY`, `SCENE_CSS` | The drawn copy and the stylesheet (every rule under `.ext-panel[data-ext="scene"] .mu-scene`). |
+| `ITEM_KIND`, `EXIT_KIND`, `KIND_SCHEMAS` | `'scene.item'`, `'scene.exit'` and their `data` schemas. |
+
+`src/types.ts` augments the SDK's `ContextKinds` with `scene.item` (`SceneItemData`) and `scene.exit` (`SceneExitData`), so an extension that imports it gets `t.data` typed in `mu.menus.context({ target: 'scene.exit', … })`.
 
 ## SDK
-SDK 1.12: `mu.panels.register` with `show: 'auto'`, `mu.panels.touch`, `mu.sessions.each`, `mu.scene.watch` (and `SceneView.id`), `mu.sessions.send(dir, { sid })`, `mu.menus.target`, `h` and `mu.ui.css`, `mu.ui.style`.
+`api` `^1.12`. SDK 1.12: `mu.panels.register` with `show: 'auto'`, `mu.panels.touch`, `mu.sessions.each`, `mu.scene.watch` (and `SceneView.id`), `mu.sessions.send(dir, { sid })`, `mu.menus.target`, `h` and `mu.ui.css`, `mu.ui.style`. SDK 1.14, used when the host has them: `mu.menus.kind` (with `JsonSchema` and `ContextKinds`), `mu.panels.focus` with `mu.commands.register`. The manifest declares `focus.scene` in `contributes.commands`, so Alt+R is listed and bound before the extension activates.
 
 ## Develop
 Made with `npm create @runmu.sh/extension` ([the quickstart](https://runmu.sh/docs/extensions/quickstart)).
