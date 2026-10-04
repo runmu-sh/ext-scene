@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- The room on games that send only its name. Evennia games such as Underspire send no GMCP `Room.Info` or `Room.Players` over telnet, so the Scene showed a title and nothing else. The extension now reads the room look the game prints (title, description, who is here, the exits line) and GMCP `Room.Name` and `Player.Context`, and fills the description, Present and Exits, as Underspire's own panel does. Moving fills the next room from its auto-look.
+- It steps aside as soon as a game sends GMCP `Room.Info` or MSDP `ROOM_EXITS` / `ROOM_VNUM`: those games are unchanged.
+- New setting **Read the room from the game text** (per world, default on).
+- Asks for `read-output` as well as `send-commands`: it reads the game text (an observe stage: read only, live lines only).
+- Exports `roomOf`, `exitsOf`, `peopleOf`, `roomNameOf`, `contextOf` and `TEXT_PRIORITY`.
+
 ## 1.2.0
 
 - Alt+R (*Go to scene*) is now the extension's own command, `focus.scene`, in Settings → Keys under Scene: Focus. On μClient with extension API 1.14 it focuses the Scene panel when it is open; a rebinding you made keeps working. On an older μClient the client's own Alt+R stays in place.

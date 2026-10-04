@@ -1,7 +1,9 @@
 /**
- * The exported API of `@runmu.sh/ext-scene` (id `scene`). The extension reads no GMCP and sends none: it draws the
- * host's scene model (`mu.scene.watch`, `SceneView`), which the room adapters fill from GMCP `Room.*`,
- * `Char.Items.*`, MSDP and other extensions (`mu.scene.set`). This file and the README change together.
+ * The exported API of `@runmu.sh/ext-scene` (id `scene`). The extension sends no GMCP: it draws the host's scene
+ * model (`mu.scene.watch`, `SceneView`), which the room adapters fill from GMCP `Room.*`, `Char.Items.*`, MSDP and
+ * other extensions (`mu.scene.set`). On games with none of those (Evennia: only `Room.Name`) it provides the room
+ * itself from `Room.Name`, `Player.Context` and the room text (1.3.0, `src/room.ts`). This file and the README
+ * change together.
  */
 import type { SceneView } from '@muclient/sdk';
 

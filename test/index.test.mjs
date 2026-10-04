@@ -70,7 +70,7 @@ async function setup({ legacy = false, ...hostOpts } = {}) {
 const heads = (el) => [...el.querySelectorAll('.sec-head')].map((x) => x.textContent);
 const exits = (el) => [...el.querySelectorAll('[data-testid=scene-exits] button')].map((b) => b.textContent.replace('▸', ''));
 
-test('registration: Scene, right top, order 10, singleton, show auto; the manifest declares it and send-commands only', async () => {
+test('registration: Scene, right top, order 10, singleton, show auto; the manifest declares it, read-output and send-commands', async () => {
   const { host } = await setup();
   assert.deepEqual([...host.panels.keys()], ['scene']);
   const { id, title, defaultPosition, order, singleton, show } = host.panels.get('scene');
@@ -80,7 +80,7 @@ test('registration: Scene, right top, order 10, singleton, show auto; the manife
     panels: [{ id: 'scene', title: 'Scene', order: 10, defaultPosition: 'right-top', singleton: true }],
     commands: [{ id: 'focus.scene', title: 'Go to scene', keys: ['Alt+R'] }],
   });
-  assert.deepEqual(pkg.muclient.capabilities, ['send-commands']);
+  assert.deepEqual(pkg.muclient.capabilities, ['read-output', 'send-commands'], 'read-output for the room text (1.3)');
   assert.equal(pkg.muclient.api, '^1.12', 'menus.kind and panels.focus are guarded, so 1.12 hosts still load it');
   assert.equal(host.errors.length, 0);
   await host.unload();
@@ -99,10 +99,10 @@ test('auto-add: touch once per session, the first time its scene knows a room, f
   assert.deepEqual(touches.length, 1);
   scene('s2', { title: 'Market Square', exits: ['e', 'w'] });
   assert.deepEqual(touches, [['scene', 's1'], ['scene', 's2']]);
-  // No GMCP handler at all: a Room.* message alone does nothing.
+  // Room.Info is the adapters' (the host's scene model), not the extension's: alone it does nothing here.
   host.gmcp('s1', 'Room.Info', { num: 1, name: 'x' });
   assert.equal(touches.length, 2);
-  assert.deepEqual(host.live().filter((r) => r.kind === 'gmcp.on'), []);
+  assert.deepEqual(host.live().filter((k) => k === 'gmcp.on' || k === 'lines.stage'), ['gmcp.on', 'gmcp.on', 'gmcp.on', 'lines.stage'], 'Room.Info (to step aside), Room.Name, Player.Context and the room-text stage');
   await host.unload();
 });
 
@@ -295,3 +295,86 @@ async function loadSource() {
   const url = 'data:text/javascript;base64,' + Buffer.from(r.outputFiles[0].text).toString('base64');
   return import(url);
 }
+
+// ─── 1.3: the room from the game's text (Evennia: Underspire sends only Room.Name and Player.Context) ──────────
+const ext = await import(pathToFileURL(join(ROOT, 'dist/index.js')).href).catch(() => null);
+const room = ext ?? (await setup()).ext;
+const INTAKE = [
+  'Usage: . <first-person text>',
+  '',
+  'Shard intake',
+  'A vast data space, humming with virtual activity.',
+  '',
+  'The intake terminal is installed here.',
+  '',
+  '^A2PGUE is standing here. You are standing here.',
+  'There are exits to the san junipero (back).',
+];
+
+test('roomOf: an Evennia look → title, description, who is here (not you), exits by name; anything else → null', () => {
+  const { roomOf, exitsOf, peopleOf } = room;
+  assert.deepEqual(roomOf(INTAKE), { title: 'Shard intake', desc: 'A vast data space, humming with virtual activity.', exits: ['san junipero'], present: ['^A2PGUE'] });
+  assert.deepEqual(roomOf(['San Junipero', 'The club is made of glass.', '', 'You are standing here.', 'There are exits to the shard intake (intake) and Shard services (s).']),
+    { title: 'San Junipero', desc: 'The club is made of glass.', exits: ['shard intake', 'Shard services'], present: [] });
+  assert.equal(roomOf(['Shard intake', 'A vast data space.']), null, 'no exits line: not a room (yet)');
+  assert.equal(roomOf(['You say, "hi."', 'There are exits to the well.']), null, 'no title line');
+  assert.deepEqual(exitsOf('There are exits to the market (m), the well, and the gate (g).'), ['market', 'well', 'gate']);
+  assert.deepEqual(exitsOf('There is an exit to Shard services (s).'), ['Shard services']);
+  assert.deepEqual(exitsOf('Exits: north, south and up'), ['north', 'south', 'up']);
+  assert.equal(exitsOf('There are no exits here, says Ivo.'), null);
+  assert.deepEqual(peopleOf('Ash and Ivo are sitting here. Mox is lying here. You are standing here.'), ['Ash', 'Ivo', 'Mox']);
+});
+
+test('Player.Context and Room.Name: title, pose and presence (without you), above the adapters', () => {
+  const { contextOf, roomNameOf, TEXT_PRIORITY } = room;
+  assert.deepEqual(contextOf({ room: 'Shard intake', pose_line: '', presence: ['^A2PGUE', 'Mox', ''], character: 'Mox' }), { title: 'Shard intake', pose: '', present: ['^A2PGUE'] });
+  assert.equal(contextOf('x'), null);
+  assert.equal(roomNameOf('Shard intake'), 'Shard intake');
+  assert.equal(roomNameOf({ name: ' Market ' }), 'Market');
+  assert.equal(TEXT_PRIORITY, 10, 'over the MSDP adapter\'s present: [] on a room name; released when the game sends a full room');
+});
+
+test('live: Room.Name, then the look text fills the scene; a typed command starts over; Room.Info turns it off', async () => {
+  const { host, mount } = await setup();
+  const provided = [];
+  const real = host.mu.scene.provide;
+  host.mu.scene.provide = (sid, patch, opts) => { provided.push({ sid, patch, priority: opts?.priority }); return real(sid, patch, opts); };
+  host.gmcp('s1', 'Room.Name', 'Shard intake');
+  // Underspire mirrors Room.Name into MSDP room_name: not a full room, the reader stays on.
+  host.msdp('s1', 'room_name', 'Shard intake');
+  assert.deepEqual(provided.at(-1), { sid: 's1', patch: { title: 'Shard intake' }, priority: 10 });
+  for (const l of INTAKE) host.line('s1', l);
+  assert.deepEqual(provided.at(-1).patch, { title: 'Shard intake', desc: 'A vast data space, humming with virtual activity.', exits: ['san junipero'], present: ['^A2PGUE'] }, 'same room: pose and items kept');
+  // A move: the auto-look of the next room.
+  for (const l of ['San Junipero', 'The club is made of glass.', '', 'You are standing here.', 'There are exits to the shard intake (intake).']) host.line('s1', l);
+  assert.deepEqual(provided.at(-1).patch, { title: 'San Junipero', desc: 'The club is made of glass.', exits: ['shard intake'], present: [], pose: '', items: [] });
+  // An echo between the title and the exits line: the block is broken, nothing is read.
+  const n = provided.length;
+  host.line('s1', 'Market'); host.line('s1', 'look', 'echo'); host.line('s1', ''); host.line('s1', 'There are exits to the gate.');
+  assert.equal(provided.length, n);
+  // Off when the game sends its own room package: the provider is released.
+  let released = 0;
+  host.mu.scene.provide = (sid, patch, opts) => { provided.push({ sid, patch, priority: opts?.priority }); real(sid, patch, opts); return () => { released++; }; };
+  host.gmcp('s1', 'Room.Name', 'Shard intake');
+  const m = provided.length;
+  host.gmcp('s1', 'Room.Info', { num: 1, name: 'Chapel' });
+  assert.equal(released, 1, 'Room.Info releases the text provider');
+  host.gmcp('s1', 'Room.Name', 'Elsewhere');
+  for (const l of INTAKE) host.line('s1', l);
+  assert.equal(provided.length, m, 'Room.Info: the adapters own the scene');
+  await host.unload();
+  assert.deepEqual(host.live(), []);
+  void mount;
+});
+
+test('setting: "Read the room from the game text" off → nothing from text or Room.Name', async () => {
+  const { host } = await setup({ settings: { fromText: false } });
+  const provided = [];
+  host.mu.scene.provide = (sid, patch) => { provided.push(patch); return () => {}; };
+  host.gmcp('s1', 'Room.Name', 'Shard intake');
+  host.gmcp('s1', 'Player.Context', { room: 'Shard intake', presence: ['A'] });
+  for (const l of INTAKE) host.line('s1', l);
+  assert.deepEqual(provided, []);
+  assert.equal(host.settingsSchema.items[0].key, 'fromText');
+  await host.unload();
+});

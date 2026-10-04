@@ -1,7 +1,8 @@
 /**
  * Scene (@runmu.sh/ext-scene): the Scene panel. The host tracks the room per session (the room adapters fill
- * `mu.scene` from GMCP Room.* and Char.Items.*, MSDP, or `mu.scene.set`); this extension only draws it, through
- * `mu.scene.watch`, so it works the same on every protocol.
+ * `mu.scene` from GMCP Room.* and Char.Items.*, MSDP, or `mu.scene.set`); this extension draws it, through
+ * `mu.scene.watch`, so it works the same on every protocol. On a game that sends only `Room.Name` (Evennia, such
+ * as Underspire) it also provides the room from `Player.Context` and the room text it prints (`./room.ts`).
  *
  * Composed as Underspire's room panel: title (uppercase glow, bottom rule), area, atmosphere (italic dim),
  * description, pose line (italic with a left rule), then ┤PRESENT├ over a ▸ list ("none" when empty) and, when the
@@ -19,9 +20,20 @@
 import { defineExtension, h, type ContextTarget, type Dispose, type JsonSchema, type Mu, type PanelMountCtx, type SceneView } from '@muclient/sdk';
 import type { PresentEntry, RenderOptions, SceneCopy, SceneCss } from './types';
 import { EXIT_KIND, ITEM_KIND } from './types';
+import { contextOf, roomNameOf, roomOf } from './room';
 
 export type { PresentEntry, RenderOptions, SceneCopy, SceneCss, SceneExitData, SceneItemData } from './types';
 export { EXIT_KIND, ITEM_KIND } from './types';
+export { contextOf, exitsOf, peopleOf, roomNameOf, roomOf } from './room';
+
+/**
+ * Above the room adapters (priority 0), so the people read from the text are not hidden by the MSDP adapter's
+ * `present: []` on a room name. A game that sends a full room (GMCP Room.Info, MSDP ROOM_EXITS or ROOM_VNUM) turns
+ * the text reader off for the session and its fields are released, so the adapters own the scene there.
+ */
+export const TEXT_PRIORITY = 10;
+/** Lines kept per session while waiting for a room's exits line. */
+const KEEP = 40;
 
 export const COPY: SceneCopy = {
   title: 'Scene',
@@ -170,6 +182,57 @@ export default defineExtension({
     if (typeof mu.panels.focus === 'function') {
       mu.commands.register({ id: 'focus.scene', title: COPY.focus, keys: ['Alt+R'], group: 'Focus', when: 'session', run: () => { mu.panels.focus?.('scene'); } });
     }
+    mu.settings.define({
+      title: 'Scene',
+      items: [{ key: 'fromText', label: 'Read the room from the game text', default: true, kind: 'toggle', scope: 'both',
+        hint: 'For games that send only the room name over GMCP (Evennia games such as Underspire): the description, who is here and the exits come from the room text. A game that sends GMCP Room.Info is unaffected.' }],
+    });
+    const fromText = (sid: string) => mu.settings.get<boolean>('fromText', { sid }) !== false;
+    // The game's own full room wins. MSDP ROOM_NAME alone is not one (Underspire mirrors Room.Name there).
+    const hasRoom = (sid: string) => mu.gmcp.state('Room.Info', sid) !== undefined || mu.msdp.state('ROOM_EXITS', sid) !== undefined || mu.msdp.state('ROOM_VNUM', sid) !== undefined;
+    const given = new Map<string, Dispose>();
+    const give = (sid: string, patch: Parameters<Mu['scene']['provide']>[1]) => { given.set(sid, mu.scene.provide(sid, patch, { priority: TEXT_PRIORITY })); };
+    const release = (sid: string) => { given.get(sid)?.(); given.delete(sid); };
+    const seen = new Map<string, string[]>();
+    const titles = new Map<string, string>();
+    ctx.subscriptions.push(
+      mu.gmcp.on('Room.Info', (_d, m) => release(m.sid)),
+      mu.msdp.on('ROOM_EXITS', (_v, m) => release(m.sid)),
+      mu.msdp.on('ROOM_VNUM', (_v, m) => release(m.sid)),
+      mu.gmcp.on('Room.Name', (d, m) => {
+        const title = roomNameOf(d);
+        if (!title || hasRoom(m.sid) || !fromText(m.sid)) return;
+        if (titles.get(m.sid) !== title) { titles.set(m.sid, title); give(m.sid, { title }); }
+      }),
+      mu.gmcp.on('Player.Context', (d, m) => {
+        const patch = contextOf(d);
+        if (!patch || hasRoom(m.sid) || !fromText(m.sid)) return;
+        if (patch.title) titles.set(m.sid, patch.title);
+        give(m.sid, patch);
+      }),
+      // Observe: read only, live lines only (not backlog). A typed command starts a new block.
+      mu.lines.stage({
+        id: 'room-text', phase: 'observe',
+        run: (line, c) => {
+          if (line.kind === 'echo') { seen.delete(c.sid); return; }
+          if (line.kind !== 'output' && line.kind !== 'prompt') return;
+          const buf = seen.get(c.sid) ?? [];
+          buf.push(line.text);
+          if (buf.length > KEEP) buf.splice(0, buf.length - KEEP);
+          seen.set(c.sid, buf);
+          const room = roomOf(buf);
+          if (!room) return;
+          seen.delete(c.sid);
+          if (hasRoom(c.sid) || !fromText(c.sid)) return;
+          // A new room drops the pose and items the last one had.
+          const moved = titles.get(c.sid) !== room.title;
+          titles.set(c.sid, room.title ?? '');
+          give(c.sid, moved ? { ...room, pose: '', items: [] } : room);
+        },
+      }),
+      mu.sessions.each((s) => () => { seen.delete(s.id); titles.delete(s.id); given.delete(s.id); }),
+    );
+
     // Listed and auto-added once per session, the first time its scene knows a room: GMCP, MSDP or a provider alike.
     ctx.subscriptions.push(mu.sessions.each((s) => {
       let done = false;
