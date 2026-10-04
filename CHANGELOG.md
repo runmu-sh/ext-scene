@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+
+- After a reload or a reconnect the Scene shows the whole room again (description, who is here, exits), not only its title: when the room name arrives it reads the newest room look among the lines the client already holds.
+
 ## 1.3.0
 
 - The room on games that send only its name. Evennia games such as Underspire send no GMCP `Room.Info` or `Room.Players` over telnet, so the Scene showed a title and nothing else. The extension now reads the room look the game prints (title, description, who is here, the exits line) and GMCP `Room.Name` and `Player.Context`, and fills the description, Present and Exits, as Underspire's own panel does. Moving fills the next room from its auto-look.

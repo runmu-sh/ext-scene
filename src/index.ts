@@ -20,7 +20,7 @@
 import { defineExtension, h, type ContextTarget, type Dispose, type JsonSchema, type Mu, type PanelMountCtx, type SceneView } from '@muclient/sdk';
 import type { PresentEntry, RenderOptions, SceneCopy, SceneCss } from './types';
 import { EXIT_KIND, ITEM_KIND } from './types';
-import { contextOf, roomNameOf, roomOf } from './room';
+import { contextOf, exitsOf, roomNameOf, roomOf } from './room';
 
 export type { PresentEntry, RenderOptions, SceneCopy, SceneCss, SceneExitData, SceneItemData } from './types';
 export { EXIT_KIND, ITEM_KIND } from './types';
@@ -195,6 +195,23 @@ export default defineExtension({
     const release = (sid: string) => { given.get(sid)?.(); given.delete(sid); };
     const seen = new Map<string, string[]>();
     const titles = new Map<string, string>();
+    // After a reload or a reconnect the last look is in the backlog, which observe stages do not see: read the
+    // newest room look among the lines the client holds, once per session, when the room name arrives.
+    const seeded = new Set<string>();
+    const seed = (sid: string) => {
+      if (seeded.has(sid) || hasRoom(sid) || !fromText(sid)) return;
+      seeded.add(sid);
+      let lines: readonly { text: string; kind: string }[] = [];
+      try { lines = mu.lines.recent(sid, { limit: 120 }); } catch { return; }
+      for (let end = lines.length - 1; end >= 0; end--) {
+        if (lines[end].kind === 'echo' || !exitsOf(lines[end].text)) continue;
+        let start = end;
+        while (start > 0 && end - start < KEEP && lines[start - 1].kind !== 'echo') start--;
+        const room = roomOf(lines.slice(start, end + 1).map((l) => l.text));
+        if (room) { titles.set(sid, room.title ?? ''); give(sid, room); }
+        return;
+      }
+    };
     ctx.subscriptions.push(
       mu.gmcp.on('Room.Info', (_d, m) => release(m.sid)),
       mu.msdp.on('ROOM_EXITS', (_v, m) => release(m.sid)),
@@ -203,12 +220,14 @@ export default defineExtension({
         const title = roomNameOf(d);
         if (!title || hasRoom(m.sid) || !fromText(m.sid)) return;
         if (titles.get(m.sid) !== title) { titles.set(m.sid, title); give(m.sid, { title }); }
+        seed(m.sid);
       }),
       mu.gmcp.on('Player.Context', (d, m) => {
         const patch = contextOf(d);
         if (!patch || hasRoom(m.sid) || !fromText(m.sid)) return;
         if (patch.title) titles.set(m.sid, patch.title);
         give(m.sid, patch);
+        seed(m.sid);
       }),
       // Observe: read only, live lines only (not backlog). A typed command starts a new block.
       mu.lines.stage({
@@ -223,6 +242,7 @@ export default defineExtension({
           const room = roomOf(buf);
           if (!room) return;
           seen.delete(c.sid);
+          seeded.add(c.sid);
           if (hasRoom(c.sid) || !fromText(c.sid)) return;
           // A new room drops the pose and items the last one had.
           const moved = titles.get(c.sid) !== room.title;
@@ -230,7 +250,7 @@ export default defineExtension({
           give(c.sid, moved ? { ...room, pose: '', items: [] } : room);
         },
       }),
-      mu.sessions.each((s) => () => { seen.delete(s.id); titles.delete(s.id); given.delete(s.id); }),
+      mu.sessions.each((s) => () => { seen.delete(s.id); titles.delete(s.id); given.delete(s.id); seeded.delete(s.id); }),
     );
 
     // Listed and auto-added once per session, the first time its scene knows a room: GMCP, MSDP or a provider alike.

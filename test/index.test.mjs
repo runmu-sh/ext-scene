@@ -378,3 +378,19 @@ test('setting: "Read the room from the game text" off → nothing from text or R
   assert.equal(host.settingsSchema.items[0].key, 'fromText');
   await host.unload();
 });
+
+test('reload: the room name (replayed) seeds the scene from the newest look the client holds', async () => {
+  const { host } = await setup();
+  const provided = [];
+  host.mu.lines.recent = () => [
+    ...['Shard intake', 'A vast data space.', '', 'There are exits to the san junipero (back).'].map((text) => ({ text, kind: 'output' })),
+    { text: 'san junipero', kind: 'echo' },
+    ...['San Junipero', 'The club is made of glass.', '', 'Ash is standing here. You are standing here.', 'There are exits to the shard intake (intake).', 'You earned 1 experience.'].map((text) => ({ text, kind: 'output' })),
+  ];
+  host.mu.scene.provide = (sid, patch) => { provided.push(patch); return () => {}; };
+  host.gmcp('s1', 'Room.Name', 'San Junipero');
+  assert.deepEqual(provided, [{ title: 'San Junipero' }, { title: 'San Junipero', desc: 'The club is made of glass.', exits: ['shard intake'], present: ['Ash'] }]);
+  host.gmcp('s1', 'Player.Context', { room: 'San Junipero', presence: [] });
+  assert.equal(provided.length, 3, 'once per session');
+  await host.unload();
+});

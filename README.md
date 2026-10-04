@@ -31,7 +31,7 @@ The intake terminal is installed here.              ← things in the room (skip
 There are exits to the san junipero (back).         ← exits, by name; ends the look
 ```
 
-The exits line (`There are exits to …`, `There is an exit to …`, `Exits: …`) closes a look; the lines before it are read back to the nearest title line. A typed command in between starts over, so the text of a `look` at a person or an item is not taken for a room. An exit button sends the exit's name (`san junipero`), which Evennia accepts as well as its alias.
+The exits line (`There are exits to …`, `There is an exit to …`, `Exits: …`) closes a look; the lines before it are read back to the nearest title line. After a reload or reconnect (the last look is then backlog), the room name arriving makes it read the newest room look among the lines the client holds, once per session. A typed command in between starts over, so the text of a `look` at a person or an item is not taken for a room. An exit button sends the exit's name (`san junipero`), which Evennia accepts as well as its alias.
 
 The text reader provides at priority 10, over the MSDP adapter's room name, and turns itself off for a session as soon as the game sends GMCP `Room.Info` or MSDP `ROOM_EXITS` / `ROOM_VNUM`; its fields are then released to the adapters. MSDP `ROOM_NAME` alone (Underspire mirrors `Room.Name` there) does not turn it off. Setting **Read the room from the game text** (per world, default on) turns it off.
 
